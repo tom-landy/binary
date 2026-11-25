@@ -44,13 +44,13 @@ struct WatchHabits: View {
                         HStack(spacing: 10) {
                             ZStack {
                                 if done {
-                                    RoundedRectangle(cornerRadius: 6).fill(Theme.violet.color)
+                                    Circle().fill(Theme.violet.color)
                                 } else {
-                                    RoundedRectangle(cornerRadius: 6).strokeBorder(Theme.violet.color, lineWidth: 1.5)
+                                    Circle().strokeBorder(Theme.track, lineWidth: 2)
                                 }
                                 Text(done ? "1" : "0")
-                                    .font(.system(size: 12, weight: .bold, design: .monospaced))
-                                    .foregroundStyle(done ? Theme.ink : Theme.violet.color)
+                                    .font(.system(size: 12, weight: .heavy, design: .rounded))
+                                    .foregroundStyle(done ? Theme.violet.onColor : Theme.tertiary)
                             }
                             .frame(width: 24, height: 24)
                             Text(habit.title).lineLimit(2)

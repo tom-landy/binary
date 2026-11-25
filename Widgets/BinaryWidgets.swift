@@ -59,26 +59,25 @@ struct HabitProvider: AppIntentTimelineProvider {
     }
 }
 
-/// The 0/1 square used across widgets.
-struct WidgetBit: View {
+/// The 0/1 circle used across widgets: an empty ring with a 0, or a filled accent circle with a 1.
+struct WidgetToggle: View {
     let done: Bool
     let tint: Color
-    var size: CGFloat = 24
-    var glyph = false
+    var onTint: Color = .white
+    var size: CGFloat = 26
+    /// Lock Screen widgets render in a single tint, so draw them with plain white.
+    var monochrome = false
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: size * 0.27)
         ZStack {
             if done {
-                shape.fill(tint)
+                Circle().fill(monochrome ? Color.white : tint)
             } else {
-                shape.strokeBorder(tint, lineWidth: max(1.5, size / 26))
+                Circle().strokeBorder(monochrome ? Color.white : Theme.track, lineWidth: max(2, size / 15))
             }
-            if glyph {
-                Text(done ? "1" : "0")
-                    .font(.system(size: size * 0.46, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(done ? Theme.ink : tint)
-            }
+            Text(done ? "1" : "0")
+                .font(.system(size: size * 0.42, weight: .heavy, design: .rounded))
+                .foregroundStyle(done ? (monochrome ? Color.black : onTint) : (monochrome ? Color.white : Theme.tertiary))
         }
         .frame(width: size, height: size)
     }
@@ -89,7 +88,8 @@ struct HabitWidgetView: View {
     @Environment(\.widgetFamily) private var family
 
     var body: some View {
-        let tint = Theme.color(entry.tint)
+        let tint = Theme.accent(entry.tint)
+        let onTint = Theme.onAccent(entry.tint)
         Group {
             if let habit = entry.habit {
                 Button(intent: LogHabit(habit: habit)) {
@@ -97,31 +97,30 @@ struct HabitWidgetView: View {
                     case .accessoryCircular:
                         ZStack {
                             AccessoryWidgetBackground()
-                            WidgetBit(done: entry.done, tint: .white, size: 30, glyph: true)
+                            WidgetToggle(done: entry.done, tint: tint, size: 32, monochrome: true)
                                 .widgetAccentable()
                         }
                     case .accessoryRectangular:
                         HStack(spacing: 10) {
-                            WidgetBit(done: entry.done, tint: .white, size: 22)
+                            WidgetToggle(done: entry.done, tint: tint, size: 24, monochrome: true)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(habit.title).font(.system(size: 14, weight: .semibold)).lineLimit(2)
-                                Text(entry.done ? "1 · Done" : "0 · Tap to log")
-                                    .font(.system(size: 11, design: .monospaced))
-                                    .textCase(.uppercase)
+                                Text(habit.title).font(.system(size: 14, weight: .heavy, design: .rounded)).lineLimit(2)
+                                Text(entry.done ? "Done" : "Tap to log")
+                                    .font(.system(size: 11, weight: .semibold, design: .rounded))
                                     .opacity(0.7)
                             }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                     default:
                         VStack(alignment: .leading, spacing: 0) {
-                            WidgetBit(done: entry.done, tint: tint, size: 52, glyph: true)
+                            WidgetToggle(done: entry.done, tint: tint, onTint: onTint, size: 50)
                             Spacer(minLength: 0)
                             Text(habit.title)
-                                .font(.system(size: 15, weight: .semibold))
+                                .font(.system(size: 15, weight: .heavy, design: .rounded))
                                 .foregroundStyle(Theme.text)
                                 .lineLimit(2)
                             Text(entry.done ? "Done today" : "Tap to log")
-                                .font(.system(size: 12))
+                                .font(.system(size: 12, weight: .semibold, design: .rounded))
                                 .foregroundStyle(Theme.secondary)
                                 .padding(.top, 3)
                         }
@@ -132,7 +131,7 @@ struct HabitWidgetView: View {
                 .accessibilityLabel("\(habit.title), \(entry.done ? "done" : "not done")")
             } else {
                 Text("No instant habit today")
-                    .font(.system(size: 13))
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
                     .foregroundStyle(Theme.secondary)
             }
         }
@@ -207,38 +206,39 @@ struct TodayWidgetView: View {
     let entry: TodayEntry
 
     var body: some View {
-        let tint = Theme.color(entry.tint)
-        HStack(alignment: .top, spacing: 18) {
-            VStack(alignment: .leading, spacing: 0) {
-                Text("Today").label()
-                Spacer(minLength: 0)
-                (Text("\(entry.done)").foregroundStyle(Theme.text)
-                 + Text("/\(entry.total)").foregroundStyle(Theme.tertiary))
-                    .font(.system(size: 40, weight: .light, design: .monospaced))
-                    .tracking(-1.5)
-                HStack(spacing: 3) {
-                    ForEach(0..<max(entry.total, 1), id: \.self) { index in
-                        RoundedRectangle(cornerRadius: 1.5)
-                            .fill(index < entry.done ? tint : Theme.raised)
-                            .frame(height: 5)
-                    }
+        let tint = Theme.accent(entry.tint)
+        let onTint = Theme.onAccent(entry.tint)
+        let progress = entry.total == 0 ? 0 : Double(entry.done) / Double(entry.total)
+        HStack(spacing: 16) {
+            ZStack {
+                Circle().inset(by: 4.5).stroke(Theme.track, lineWidth: 9)
+                Circle().inset(by: 4.5)
+                    .trim(from: 0, to: max(0.001, progress))
+                    .stroke(tint, style: StrokeStyle(lineWidth: 9, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                VStack(spacing: 0) {
+                    Text("\(entry.done)/\(entry.total)")
+                        .font(.system(size: 22, weight: .black, design: .rounded))
+                        .foregroundStyle(Theme.text)
+                    Text("today")
+                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                        .foregroundStyle(Theme.secondary)
                 }
-                .padding(.top, 8)
             }
-            .frame(width: 110)
+            .frame(width: 96, height: 96)
 
             VStack(alignment: .leading, spacing: 10) {
                 if entry.items.isEmpty {
                     Text("No instant habits today")
-                        .font(.system(size: 13))
+                        .font(.system(size: 13, weight: .semibold, design: .rounded))
                         .foregroundStyle(Theme.secondary)
                 } else {
                     ForEach(entry.items) { item in
                         Button(intent: LogHabit(habit: item.habit)) {
                             HStack(spacing: 10) {
-                                WidgetBit(done: item.done, tint: tint, size: 24)
+                                WidgetToggle(done: item.done, tint: tint, onTint: onTint, size: 26)
                                 Text(item.habit.title)
-                                    .font(.system(size: 14, weight: .semibold))
+                                    .font(.system(size: 14, weight: .heavy, design: .rounded))
                                     .foregroundStyle(item.done ? Theme.secondary : Theme.text)
                                     .lineLimit(1)
                                 Spacer(minLength: 0)
@@ -250,7 +250,6 @@ struct TodayWidgetView: View {
                     }
                 }
             }
-            .frame(maxHeight: .infinity, alignment: .center)
         }
         .containerBackground(Theme.surface, for: .widget)
     }
@@ -308,9 +307,8 @@ struct FocusWidgetView: View {
     }
 
     var body: some View {
-        let tint = Theme.color(entry.tint)
+        let tint = Theme.accent(entry.tint)
         let session = entry.session
-        let phase = session.phase == .work ? "1 Work" : "0 Rest"
         Group {
             switch family {
             case .accessoryCircular:
@@ -318,21 +316,19 @@ struct FocusWidgetView: View {
                     ZStack {
                         AccessoryWidgetBackground()
                         VStack(spacing: 1) {
-                            Text(session.phase.rawValue)
-                                .font(.system(size: 9, weight: .bold, design: .monospaced))
-                                .textCase(.uppercase)
-                            time(session).font(.system(size: 14, weight: .semibold, design: .monospaced))
+                            Text(session.phase.rawValue.uppercased())
+                                .font(.system(size: 9, weight: .heavy, design: .rounded))
+                            time(session).font(.system(size: 15, weight: .black, design: .rounded))
                         }
                     }
                 }
                 .buttonStyle(.plain)
             case .accessoryRectangular:
                 Button(intent: ToggleFocus()) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Label(phase, systemImage: running ? "pause.fill" : "play.fill")
-                            .font(.system(size: 12, weight: .semibold, design: .monospaced))
-                            .textCase(.uppercase)
-                        time(session).font(.system(size: 26, weight: .light, design: .monospaced))
+                    VStack(alignment: .leading, spacing: 1) {
+                        Label(session.phase.rawValue, systemImage: running ? "pause.fill" : "play.fill")
+                            .font(.system(size: 13, weight: .heavy, design: .rounded))
+                        time(session).font(.system(size: 26, weight: .black, design: .rounded))
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -340,29 +336,30 @@ struct FocusWidgetView: View {
             default:
                 VStack(alignment: .leading, spacing: 0) {
                     HStack {
-                        Text(phase).label(tint)
+                        Text(session.phase.rawValue)
+                            .font(.system(size: 12, weight: .heavy, design: .rounded))
+                            .foregroundStyle(Theme.secondary)
                         Spacer()
                         Button(intent: ToggleFocus()) {
                             Image(systemName: running ? "pause.fill" : "play.fill")
                                 .font(.system(size: 13, weight: .bold))
-                                .foregroundStyle(Theme.ink)
+                                .foregroundStyle(Theme.onInk)
                                 .frame(width: 34, height: 34)
-                                .background(tint, in: Circle())
+                                .background(Theme.ink, in: Circle())
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel(running ? "Pause" : "Start")
                     }
                     Spacer(minLength: 0)
                     time(session)
-                        .font(.system(size: 34, weight: .light, design: .monospaced))
-                        .tracking(-1.5)
+                        .font(.system(size: 34, weight: .black, design: .rounded))
                         .minimumScaleFactor(0.6)
                         .lineLimit(1)
                         .foregroundStyle(Theme.text)
                     progress(session, tint: tint)
                         .padding(.top, 8)
-                    Text(session.habitTitle ?? "\(session.work)/\(session.rest) focus")
-                        .font(.system(size: 12))
+                    Text(session.habitTitle ?? "\(session.work) / \(session.rest) focus")
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
                         .foregroundStyle(Theme.secondary)
                         .lineLimit(1)
                         .padding(.top, 6)
@@ -379,14 +376,16 @@ struct FocusWidgetView: View {
         } else {
             let seconds = Int(ceil(session.remaining()))
             Text(String(format: "%02d:%02d", seconds / 60, seconds % 60))
+                .monospacedDigit()
         }
     }
 
     @ViewBuilder private func progress(_ session: FocusSession, tint: Color) -> some View {
-        let total = Double((session.phase == .work ? session.work : session.rest) * 60)
+        let total = Double(session.total)
         if let end = session.end, end > .now {
-            let start = end.addingTimeInterval(-total)
-            ProgressView(timerInterval: start...end, countsDown: true) { EmptyView() } currentValueLabel: { EmptyView() }
+            ProgressView(timerInterval: end.addingTimeInterval(-total)...end, countsDown: true) {
+                EmptyView()
+            } currentValueLabel: { EmptyView() }
                 .progressViewStyle(.linear)
                 .tint(tint)
         } else {
@@ -411,76 +410,76 @@ struct FocusWidget: Widget {
 struct FocusLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: FocusActivity.self) { context in
-            let tint = Theme.color(context.attributes.tint)
-            let phase = context.state.phase == "Work" ? "1 Work" : "0 Rest"
+            let tint = Theme.accent(context.attributes.tint)
             VStack(spacing: 12) {
                 HStack(spacing: 12) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(context.isStale ? "\(phase) · complete" : phase).label(tint)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(context.isStale ? "\(context.state.phase) complete" : context.state.phase)
+                            .font(.system(size: 13, weight: .bold, design: .rounded))
+                            .foregroundStyle(Theme.secondary)
                         Text(context.isStale ? "Open Binary to log it" : title(context.attributes.habit))
-                            .font(.system(size: 16, weight: .semibold))
+                            .font(.system(size: 17, weight: .heavy, design: .rounded))
                             .foregroundStyle(Theme.text)
                             .lineLimit(1)
                     }
                     Spacer()
                     if !context.isStale {
                         clock(context.state)
-                            .font(.system(size: 38, weight: .light, design: .monospaced))
-                            .tracking(-1.5)
+                            .font(.system(size: 32, weight: .black, design: .rounded))
                             .foregroundStyle(Theme.text)
-                            .frame(maxWidth: 130, alignment: .trailing)
-                        control(context.state, tint: tint)
+                            .frame(maxWidth: 120, alignment: .trailing)
+                        control(context.state)
                     }
                 }
                 if !context.isStale { progress(context.state, tint: tint) }
             }
             .padding(16)
-            .activityBackgroundTint(Theme.background)
+            .activityBackgroundTint(Theme.surface)
             .activitySystemActionForegroundColor(Theme.text)
         } dynamicIsland: { context in
-            let tint = Theme.color(context.attributes.tint)
-            let phase = context.state.phase == "Work" ? "1 Work" : "0 Rest"
+            let tint = Theme.accent(context.attributes.tint)
             return DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
-                    Text(phase).label(tint).padding(.leading, 4)
+                    Text(context.state.phase)
+                        .font(.system(size: 14, weight: .heavy, design: .rounded))
+                        .foregroundStyle(tint)
+                        .padding(.leading, 4)
                 }
                 DynamicIslandExpandedRegion(.trailing) {
-                    if !context.isStale { control(context.state, tint: tint) }
+                    if !context.isStale { control(context.state, dark: true) }
                 }
                 DynamicIslandExpandedRegion(.center) {
                     if context.isStale {
-                        Text("Complete").font(.system(size: 16, weight: .semibold))
+                        Text("Complete").font(.system(size: 16, weight: .heavy, design: .rounded))
                     } else {
                         clock(context.state)
-                            .font(.system(size: 28, weight: .light, design: .monospaced))
+                            .font(.system(size: 28, weight: .black, design: .rounded))
                             .frame(maxWidth: 120)
                     }
                 }
                 DynamicIslandExpandedRegion(.bottom) {
                     VStack(spacing: 8) {
                         if !context.attributes.habit.isEmpty {
-                            Text(context.attributes.habit).font(.system(size: 14)).foregroundStyle(Theme.secondary)
+                            Text(context.attributes.habit)
+                                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                                .foregroundStyle(.secondary)
                         }
                         if !context.isStale { progress(context.state, tint: tint) }
                     }
                 }
             } compactLeading: {
-                Text(context.state.phase == "Work" ? "1" : "0")
-                    .font(.system(size: 14, weight: .bold, design: .monospaced))
+                Image(systemName: context.state.phase == "Work" ? "circle.fill" : "circle")
                     .foregroundStyle(tint)
             } compactTrailing: {
                 if context.isStale {
                     Image(systemName: "checkmark").foregroundStyle(tint)
                 } else {
                     clock(context.state)
-                        .font(.system(size: 14, weight: .medium, design: .monospaced))
+                        .font(.system(size: 14, weight: .heavy, design: .rounded))
                         .frame(width: 48)
-                        .foregroundStyle(tint)
                 }
             } minimal: {
-                Text(context.state.phase == "Work" ? "1" : "0")
-                    .font(.system(size: 14, weight: .bold, design: .monospaced))
-                    .foregroundStyle(tint)
+                Image(systemName: "timer").foregroundStyle(tint)
             }
         }
     }
@@ -506,8 +505,9 @@ struct FocusLiveActivity: Widget {
     private func progress(_ state: FocusActivity.ContentState, tint: Color) -> some View {
         let total = Double(max(1, state.total))
         if let end = state.end {
-            let start = end.addingTimeInterval(-total)
-            ProgressView(timerInterval: start...end, countsDown: true) { EmptyView() } currentValueLabel: { EmptyView() }
+            ProgressView(timerInterval: end.addingTimeInterval(-total)...end, countsDown: true) {
+                EmptyView()
+            } currentValueLabel: { EmptyView() }
                 .progressViewStyle(.linear)
                 .tint(tint)
         } else {
@@ -517,13 +517,14 @@ struct FocusLiveActivity: Widget {
         }
     }
 
-    private func control(_ state: FocusActivity.ContentState, tint: Color) -> some View {
+    /// Ink button on the Lock Screen; white on the always-dark Dynamic Island.
+    private func control(_ state: FocusActivity.ContentState, dark: Bool = false) -> some View {
         Button(intent: ToggleFocus()) {
             Image(systemName: state.end == nil ? "play.fill" : "pause.fill")
                 .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(Theme.ink)
+                .foregroundStyle(dark ? Color.black : Theme.onInk)
                 .frame(width: 42, height: 42)
-                .background(tint, in: Circle())
+                .background(dark ? Color.white : Theme.ink, in: Circle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel(state.end == nil ? "Resume" : "Pause")

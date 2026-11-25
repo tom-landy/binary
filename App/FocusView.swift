@@ -20,36 +20,40 @@ struct FocusView: View {
     var body: some View {
         let session = engine.session
         ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
+            VStack(spacing: 0) {
                 HStack {
-                    Text("Focus").label()
+                    Color.clear.frame(width: 44, height: 44)
+                    Spacer()
+                    Text(session.habitTitle == nil ? "Focus" : "Focusing on")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(Theme.secondary)
                     Spacer()
                     if showsSettings {
                         CircleIconButton(systemImage: "gearshape", label: "Settings", action: openSettings)
+                    } else {
+                        Color.clear.frame(width: 44, height: 44)
                     }
                 }
-                .frame(height: 44)
-                Text(session.habitTitle ?? "Focus session")
-                    .font(.system(size: 34, weight: .bold))
-                    .tracking(-0.8)
+                Text(session.habitTitle ?? "Free session")
+                    .font(.system(size: 30, weight: .black))
+                    .foregroundStyle(Theme.text)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
                     .padding(.top, 2)
 
-                phaseSwitch(session)
-                    .padding(.top, 22)
+                phaseControl(session)
+                    .padding(.top, 16)
 
                 TimelineView(.periodic(from: .now, by: 0.25)) { tick in
-                    readout(session, at: tick.date)
+                    dial(session, at: tick.date)
                 }
+                .padding(.top, 28)
 
                 controls(session)
-                    .padding(.top, 30)
+                    .padding(.top, 32)
 
-                Text("Intervals").label()
-                    .padding(.top, 30)
                 intervals(session)
-                    .padding(.top, 10)
+                    .padding(.top, 30)
             }
             .padding(.horizontal, 20)
             .padding(.bottom, 32)
@@ -58,21 +62,20 @@ struct FocusView: View {
         }
         .scrollIndicators(.hidden)
         .background(Theme.background)
-        .foregroundStyle(Theme.text)
         .sheet(isPresented: $custom) { customSheet }
     }
 
     // MARK: Phase
 
-    /// Work is 1, Rest is 0. Tapping the inactive side skips to it.
-    private func phaseSwitch(_ session: FocusSession) -> some View {
+    /// Work / Rest segmented control. Tapping the other side skips to it.
+    private func phaseControl(_ session: FocusSession) -> some View {
         HStack(spacing: 0) {
-            phaseSegment("1 Work", active: session.phase == .work)
-            phaseSegment("0 Rest", active: session.phase == .rest)
+            phaseSegment("Work", active: session.phase == .work)
+            phaseSegment("Rest", active: session.phase == .rest)
         }
-        .padding(3)
-        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 10))
-        .frame(width: 184)
+        .padding(4)
+        .background(Theme.track, in: RoundedRectangle(cornerRadius: 14))
+        .fixedSize()
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(session.phase.rawValue) interval")
         .accessibilityHint("Double tap to switch")
@@ -82,41 +85,50 @@ struct FocusView: View {
     private func phaseSegment(_ title: String, active: Bool) -> some View {
         Button { if !active { skip() } } label: {
             Text(title)
-                .font(.system(size: 12, weight: active ? .bold : .semibold, design: .monospaced))
-                .tracking(1.2)
-                .textCase(.uppercase)
-                .foregroundStyle(active ? Theme.ink : Theme.tertiary)
-                .frame(maxWidth: .infinity, minHeight: 30)
-                .background(active ? theme.color : .clear, in: RoundedRectangle(cornerRadius: 8))
+                .font(.system(size: 14, weight: active ? .heavy : .bold))
+                .foregroundStyle(active ? Theme.text : Theme.secondary)
+                .padding(.horizontal, 20)
+                .frame(height: 32)
+                .background {
+                    if active {
+                        RoundedRectangle(cornerRadius: 11).fill(Theme.surface).paperShadow()
+                    }
+                }
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
 
-    // MARK: Readout
+    // MARK: Dial
 
-    private func readout(_ session: FocusSession, at date: Date) -> some View {
+    private func dial(_ session: FocusSession, at date: Date) -> some View {
         let working = session.phase == .work
         let minutes = working ? session.work : session.rest
         let total = Double(minutes * 60)
         let remaining = session.remaining(at: date)
-        let next = working ? "then \(session.rest) min rest" : "then \(session.work) min work"
-        return VStack(alignment: .leading, spacing: 0) {
-            Text(clock(remaining))
-                .font(.system(size: 92, weight: .light, design: .monospaced))
-                .tracking(-4)
-                .lineLimit(1)
-                .minimumScaleFactor(0.5)
-                .contentTransition(.numericText(countsDown: true))
-                .padding(.top, 26)
-            Text("of \(minutes) min · \(next)")
-                .font(.system(size: 14))
-                .foregroundStyle(Theme.secondary)
-                .padding(.top, 8)
-            MinuteGrid(total: total, remaining: remaining,
-                       color: working ? theme.color : theme.color.opacity(0.5))
-                .padding(.top, 26)
+        let next = working ? "then \(session.rest) rest" : "then \(session.work) work"
+        return ZStack {
+            Circle().fill(Theme.surface).paperShadow()
+            ProgressRing(value: remaining / max(total, 1),
+                         color: working ? theme.color : theme.color.opacity(0.45),
+                         lineWidth: 12) {
+                VStack(spacing: 4) {
+                    Text(clock(remaining))
+                        .font(.system(size: 66, weight: .black))
+                        .monospacedDigit()
+                        .tracking(-1)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.5)
+                        .foregroundStyle(Theme.text)
+                    Text("of \(minutes) min · \(next)")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(Theme.secondary)
+                }
+                .padding(30)
+            }
         }
+        .frame(maxWidth: 290)
+        .aspectRatio(1, contentMode: .fit)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(session.phase.rawValue), \(clock(remaining)) remaining of \(minutes) minutes")
     }
@@ -130,23 +142,32 @@ struct FocusView: View {
 
     private func controls(_ session: FocusSession) -> some View {
         let running = session.end != nil
-        let full = Double((session.phase == .work ? session.work : session.rest) * 60)
-        let title = running ? "Pause" : (session.seconds < full ? "Resume" : "Start")
-        return HStack(spacing: 10) {
-            squareButton("Reset", systemImage: "arrow.counterclockwise", action: reset)
-            PrimaryButton(title: title, systemImage: running ? "pause.fill" : "play.fill",
-                          theme: theme, action: play)
-            squareButton("Skip interval", systemImage: "forward.end.fill", action: skip)
+        let full = Double(session.total)
+        let label = running ? "Pause" : (session.seconds < full ? "Resume" : "Start")
+        return HStack(spacing: 22) {
+            roundButton("Reset", systemImage: "arrow.counterclockwise", action: reset)
+            Button(action: play) {
+                Image(systemName: running ? "pause.fill" : "play.fill")
+                    .font(.system(size: 28, weight: .bold))
+                    .foregroundStyle(Theme.onInk)
+                    .frame(width: 84, height: 84)
+                    .background(Theme.ink, in: Circle())
+                    .shadow(color: Theme.shadow, radius: 14, y: 8)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(label)
+            roundButton("Skip interval", systemImage: "forward.end.fill", action: skip)
         }
     }
 
-    private func squareButton(_ title: String, systemImage: String, action: @escaping () -> Void) -> some View {
+    private func roundButton(_ title: String, systemImage: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: systemImage)
-                .font(.system(size: 18, weight: .semibold))
+                .font(.system(size: 18, weight: .bold))
                 .foregroundStyle(Theme.text)
-                .frame(width: 56, height: 56)
-                .background(Theme.surface, in: RoundedRectangle(cornerRadius: 16))
+                .frame(width: 58, height: 58)
+                .background(Theme.surface, in: Circle())
+                .paperShadow()
         }
         .buttonStyle(.plain)
         .accessibilityLabel(title)
@@ -160,13 +181,13 @@ struct FocusView: View {
         return HStack(spacing: 8) {
             ForEach(Self.presets.indices, id: \.self) { index in
                 let preset = Self.presets[index]
-                intervalChip("\(preset.0)/\(preset.1)", mono: true,
+                intervalChip("\(preset.0) / \(preset.1)",
                              selected: free && session.work == preset.0 && session.rest == preset.1) {
                     configure(preset.0, preset.1)
                 }
                 .accessibilityLabel("\(preset.0) minutes work, \(preset.1) minutes rest")
             }
-            intervalChip("Custom", mono: false, selected: free && !isPreset) {
+            intervalChip("Custom", selected: free && !isPreset) {
                 work = session.work
                 rest = session.rest
                 custom = true
@@ -174,17 +195,14 @@ struct FocusView: View {
         }
     }
 
-    private func intervalChip(_ title: String, mono: Bool, selected: Bool,
-                              action: @escaping () -> Void) -> some View {
+    private func intervalChip(_ title: String, selected: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
-                .font(.system(size: 14, weight: selected ? .bold : .regular, design: mono ? .monospaced : .default))
-                .foregroundStyle(selected ? Theme.ink : Theme.secondary)
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(selected ? Theme.onInk : Theme.secondary)
                 .frame(maxWidth: .infinity, minHeight: 40)
-                .background(selected ? theme.color : Theme.surface, in: RoundedRectangle(cornerRadius: 12))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 12).strokeBorder(selected ? .clear : Theme.line, lineWidth: 1)
-                }
+                .background(selected ? Theme.ink : Theme.surface, in: Capsule())
+                .paperShadow()
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(selected ? .isSelected : [])
@@ -193,16 +211,18 @@ struct FocusView: View {
     private var customSheet: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Custom intervals")
-                .font(.system(size: 20, weight: .bold))
+                .font(.system(size: 22, weight: .black))
                 .padding(.top, 28)
-            Text("Work").label().padding(.top, 24)
-            Stepper("\(work) min", value: $work, in: 1...180).font(.system(size: 17, design: .monospaced))
+            Text("Work").label().padding(.top, 22)
+            Stepper("\(work) min", value: $work, in: 1...180)
+                .font(.system(size: 17, weight: .bold))
                 .padding(.top, 8)
-            Text("Rest").label().padding(.top, 20)
-            Stepper("\(rest) min", value: $rest, in: 1...60).font(.system(size: 17, design: .monospaced))
+            Text("Rest").label().padding(.top, 18)
+            Stepper("\(rest) min", value: $rest, in: 1...60)
+                .font(.system(size: 17, weight: .bold))
                 .padding(.top, 8)
             Spacer()
-            PrimaryButton(title: "Use \(work)/\(rest)", theme: theme) {
+            PrimaryButton(title: "Use \(work) / \(rest)") {
                 configure(work, rest)
                 custom = false
             }
@@ -210,44 +230,11 @@ struct FocusView: View {
         }
         .padding(.horizontal, 20)
         .foregroundStyle(Theme.text)
+        .fontDesign(.rounded)
         .tint(theme.color)
         .presentationDetents([.height(340)])
         .presentationDragIndicator(.visible)
-        .presentationBackground(Theme.surface)
-    }
-}
-
-/// One cell per minute (or per five minutes for long intervals). Remaining time is lit;
-/// elapsed cells go dark, and the current cell drains from the top.
-struct MinuteGrid: View {
-    let total: Double
-    let remaining: Double
-    let color: Color
-
-    var body: some View {
-        let unit: Double = total > 3600 ? 300 : 60
-        let count = max(1, Int(ceil(total / unit)))
-        let elapsed = total - remaining
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 10), spacing: 6) {
-            ForEach(0..<count, id: \.self) { index in
-                let start = Double(index) * unit
-                let left = min(1, max(0, (start + unit - elapsed) / unit))
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(left >= 1 ? color : (left <= 0 ? Theme.surface : color.opacity(0.25)))
-                    .overlay(alignment: .bottom) {
-                        if left > 0 && left < 1 {
-                            GeometryReader { proxy in
-                                Rectangle().fill(color)
-                                    .frame(height: proxy.size.height * left)
-                                    .frame(maxHeight: .infinity, alignment: .bottom)
-                            }
-                        }
-                    }
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                    .aspectRatio(1, contentMode: .fit)
-            }
-        }
-        .accessibilityHidden(true)
+        .presentationBackground(Theme.background)
     }
 }
 
@@ -257,6 +244,7 @@ struct SettingsView: View {
     let syncAvailable: Bool
     @Environment(\.dismiss) private var dismiss
     @AppStorage(Theme.key, store: Theme.defaults) private var theme = Theme.violet
+    @AppStorage("appearance") private var appearance = Appearance.system
     @AppStorage("matchIcon") private var matchIcon = false
     @AppStorage("autoTransition") private var autoTransition = false
     @AppStorage("keepAwake") private var keepAwake = false
@@ -268,21 +256,24 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section {
+                Section("Look") {
+                    Picker("Appearance", selection: $appearance) {
+                        ForEach(Appearance.allCases) { Text($0.title).tag($0) }
+                    }
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 56))], spacing: 16) {
                         ForEach(Theme.allCases) { color in
                             Button { theme = color } label: {
                                 VStack(spacing: 6) {
-                                    RoundedRectangle(cornerRadius: 9)
+                                    Circle()
                                         .fill(color.color)
                                         .frame(width: 34, height: 34)
                                         .overlay {
                                             if theme == color {
-                                                Text("1").font(.system(size: 16, weight: .bold, design: .monospaced))
-                                                    .foregroundStyle(Theme.ink)
+                                                Text("1").font(.system(size: 15, weight: .heavy))
+                                                    .foregroundStyle(color.onColor)
                                             }
                                         }
-                                    Text(color.title).font(.caption)
+                                    Text(color.title).font(.caption.weight(.semibold))
                                         .foregroundStyle(theme == color ? Theme.text : Theme.secondary)
                                 }
                                 .frame(maxWidth: .infinity)
@@ -294,12 +285,10 @@ struct SettingsView: View {
                     }
                     .padding(.vertical, 8)
                     Toggle("Match Home Screen icon", isOn: $matchIcon)
-                } header: {
-                    Text("Accent").label()
                 }
                 .listRowBackground(Theme.surface)
 
-                Section {
+                Section("Focus") {
                     Toggle("Auto-start next interval", isOn: $autoTransition)
                     Toggle("Keep screen awake", isOn: $keepAwake)
                     Toggle("Notify when an interval ends", isOn: $reminders)
@@ -309,17 +298,13 @@ struct SettingsView: View {
                     Picker("Haptics", selection: $haptics) {
                         ForEach(["Off", "Soft", "Firm"], id: \.self) { Text($0) }
                     }
-                } header: {
-                    Text("Focus").label()
                 }
                 .listRowBackground(Theme.surface)
 
-                Section {
+                Section("Data") {
                     Label(syncAvailable ? "Syncing with iCloud" : "Stored on this device. iCloud sync is unavailable.",
                           systemImage: syncAvailable ? "icloud" : "icloud.slash")
                         .foregroundStyle(syncAvailable ? Theme.text : Theme.secondary)
-                } header: {
-                    Text("Data").label()
                 }
                 .listRowBackground(Theme.surface)
             }
@@ -327,8 +312,9 @@ struct SettingsView: View {
             .background(Theme.background)
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { Button("Done") { dismiss() }.fontWeight(.semibold) }
+            .toolbar { Button("Done") { dismiss() }.fontWeight(.bold) }
             .toolbarBackground(Theme.background, for: .navigationBar)
+            .fontDesign(.rounded)
             .tint(theme.color)
             .onChange(of: reminders) {
                 Task {

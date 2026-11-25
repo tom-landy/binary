@@ -10,6 +10,7 @@ struct BinaryApp: App {
     @State private var store: ModelContainer?
     @State private var syncAvailable = true
     @State private var loadError: String?
+    @AppStorage("appearance") private var appearance = Appearance.system
 
     init() { Theme.migrate() }
 
@@ -31,7 +32,8 @@ struct BinaryApp: App {
                 }
             }
             .background(Theme.background.ignoresSafeArea())
-            .preferredColorScheme(.dark)
+            .fontDesign(.rounded)
+            .preferredColorScheme(appearance.scheme)
         }
     }
 
@@ -104,7 +106,7 @@ struct Workspace: View {
                         focusPane(showsSettings: true)
                     }
                 }
-                .toolbarBackground(Theme.background.opacity(0.94), for: .tabBar)
+                .toolbarBackground(Theme.background, for: .tabBar)
                 .toolbarBackground(.visible, for: .tabBar)
             }
         }
