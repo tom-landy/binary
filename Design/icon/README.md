@@ -1,9 +1,13 @@
 # App icon
 
-The Binary mark is two open orbits, a planet and a moon. `generate.py` holds it as vector
-geometry, fitted to the original artwork (`mark-source.png`, kept for reference) and then
-adjusted: rounder orbits, a lighter outer orbit, a larger planet, and a pink-to-violet orbit gradient.
-The settings at the top of `generate.py` (roundness, tilt, weights, fill, colours) control the result.
+The Binary mark is one bold orbit with a moon in its gap and a planet off-centre, in a
+pink-to-violet gradient. It descends from the original artwork (`mark-source.png`, kept for
+reference) and follows the house style of the other Warhound icons: heavy round-capped strokes,
+one gradient per shape, and a dark background with a soft glow of the accent colour.
+
+`generate.py` holds the geometry and colours as settings at the top. `FILL` sets how much of the
+icon the mark spans (currently 74%); the Watch icon is sized separately so its circular crop
+never clips the mark.
 
 Run from the repository root. `render.js` needs Node with Playwright and Chromium.
 
