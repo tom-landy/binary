@@ -22,6 +22,20 @@ final class Habit {
         return weekdays & (1 << (day - 1)) != 0
     }
 
+    /// A short description of a weekday bitmask (bit 0 = Sunday).
+    static func scheduleText(_ weekdays: Int, calendar: Calendar = .current) -> String {
+        switch weekdays {
+        case 127: return "Daily"
+        case 62: return "Weekdays"
+        case 65: return "Weekends"
+        default:
+            return calendar.orderedWeekdays
+                .filter { weekdays & (1 << $0) != 0 }
+                .map { calendar.shortWeekdaySymbols[$0] }
+                .joined(separator: ", ")
+        }
+    }
+
     func completed(_ date: Date) -> Bool {
         (logs ?? []).contains { Calendar.current.isDate($0.date, inSameDayAs: date) }
     }
@@ -57,8 +71,8 @@ final class HabitLog {
 
 @MainActor
 enum HabitStore {
-    static let cloudID = "iCloud.com.warhound.binary"
-    static let groupID = "group.com.warhound.binary"
+    nonisolated static let cloudID = "iCloud.com.warhound.binary"
+    nonisolated static let groupID = "group.com.warhound.binary"
     static let schema = Schema([Habit.self, HabitLog.self])
 
     static func make(sync: Bool) throws -> ModelContainer {
@@ -73,5 +87,12 @@ enum HabitStore {
             cloudKitDatabase: sync ? .private(cloudID) : .none
         )
         return try ModelContainer(for: schema, configurations: configuration)
+    }
+}
+
+extension Calendar {
+    /// Weekday indexes (0 = Sunday) in the order the user's locale starts the week.
+    var orderedWeekdays: [Int] {
+        (0..<7).map { (firstWeekday - 1 + $0) % 7 }
     }
 }

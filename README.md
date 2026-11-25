@@ -38,8 +38,10 @@ For TestFlight, create the app record in App Store Connect using `com.warhound.b
 
 ## Device checks
 
-- Create an instant weekday habit and a timed habit. Toggle the instant habit in the app and in its Home Screen or Lock Screen widget. Check the history dots and today’s count.
+- Create an instant weekday habit and a timed habit. Toggle the instant habit in the app and in its Home Screen or Lock Screen widget. Check the history cells, today’s bit string and count. Tap the 0/1 tile on the timed habit to mark it done by hand.
+- Start a session, then tap a different timed habit, a preset, or Reset. Binary should ask before replacing the session.
 - Give the timed habit a one-minute Work interval. Pause and resume in the app and in the Live Activity. Let Work finish, reopen Binary if it was suspended, and verify the timed habit logs on the Work deadline’s date. Test manual completion and skipping independently.
 - Enable completion notifications and test a locked-device interval. The countdown uses a persisted deadline. iOS can deliver a local reminder while Binary is suspended. Binary records completion and advances the phase when its active UI next reconciles that deadline. Keep-awake applies while Binary is active.
-- Test the timer widget, Siri shortcuts, Action Button shortcut assignment, and the Binary Focus filter. Test the 10 themes and optional Home Screen icon matching.
+- Test the timer widget: it should show the live countdown, and its button should pause and resume. Let a habit-linked Work interval finish with Binary closed, then press play on the widget. The habit should be logged and Rest should start. Check the Live Activity reads “Work complete” once the interval has ended.
+- Test Siri shortcuts, Action Button shortcut assignment, and the Binary Focus filter. Test the 10 themes in the app, widgets and Live Activity, and Home Screen icon matching (including Violet).
 - Open Binary on an iPad and confirm the two-pane layout at regular width. Toggle an instant habit on the paired Watch and verify the change syncs through iCloud.

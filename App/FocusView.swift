@@ -15,41 +15,50 @@ struct FocusView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 24) {
-                HStack {
-                    Text("Focus").font(.title2.bold())
-                    Spacer()
-                    Button("Custom", systemImage: "slider.horizontal.3") {
-                        work = engine.session.work
-                        rest = engine.session.rest
-                        custom = true
-                    }.labelStyle(.iconOnly)
-                    .accessibilityLabel("Custom intervals")
-                }
+            VStack(spacing: 28) {
                 clock
-                HStack(spacing: 15) {
-                    Button("Reset", systemImage: "arrow.counterclockwise", action: reset)
-                        .labelStyle(.iconOnly)
-                        .frame(width: 44, height: 44)
-                    Button(engine.session.end == nil ? "Start" : "Pause",
-                           systemImage: engine.session.end == nil ? "play.fill" : "pause.fill",
-                           action: play)
-                        .font(.headline)
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 7)
-                        .buttonStyle(.borderedProminent)
-                        .foregroundStyle(.black)
-                    Button("Skip interval", systemImage: "forward.end", action: skip)
-                        .labelStyle(.iconOnly)
-                        .frame(width: 44, height: 44)
+                    .padding(.top, 8)
+                HStack(spacing: 28) {
+                    circleButton("Reset", systemImage: "arrow.counterclockwise", action: reset)
+                    Button(action: play) {
+                        Image(systemName: engine.session.end == nil ? "play.fill" : "pause.fill")
+                            .font(.title.weight(.semibold))
+                            .foregroundStyle(.black)
+                            .frame(width: 84, height: 84)
+                            .background(theme.color, in: Circle())
+                            .shadow(color: theme.color.opacity(0.45), radius: 16)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(engine.session.end == nil ? "Start" : "Pause")
+                    circleButton("Skip interval", systemImage: "forward.end.fill", action: skip)
                 }
-                HStack(spacing: 8) {
-                    preset(25, 5)
-                    preset(50, 10)
-                    preset(15, 3)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Intervals")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .padding(.leading, 4)
+                    HStack(spacing: 8) {
+                        preset(25, 5)
+                        preset(50, 10)
+                        preset(15, 3)
+                        Button {
+                            work = engine.session.work
+                            rest = engine.session.rest
+                            custom = true
+                        } label: {
+                            Image(systemName: "slider.horizontal.3")
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 46)
+                                .background(Theme.panel, in: RoundedRectangle(cornerRadius: 12))
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(isCustom ? theme.color : Color.secondary)
+                        .accessibilityLabel("Custom intervals")
+                    }
                 }
             }
-            .padding(22)
+            .padding(.horizontal, 20)
+            .padding(.bottom, 24)
             .frame(maxWidth: 520)
             .frame(maxWidth: .infinity)
         }
@@ -84,12 +93,12 @@ struct FocusView: View {
             let total = Double((working ? session.work : session.rest) * 60)
             let accent = theme.color.opacity(working ? 1 : 0.48)
             ZStack {
-                Circle().strokeBorder(accent.opacity(0.18), lineWidth: 3)
+                Circle().strokeBorder(accent.opacity(0.16), lineWidth: 6)
                 Circle()
                     .trim(from: 0, to: min(1, seconds / total))
-                    .stroke(accent, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                    .stroke(accent, style: StrokeStyle(lineWidth: 6, lineCap: .round))
                     .rotationEffect(.degrees(-90))
-                    .padding(2)
+                    .padding(3)
                     .shadow(color: accent.opacity(working ? 0.55 : 0.15), radius: 8)
                 VStack(spacing: 8) {
                     Label(session.phase.rawValue.uppercased(), systemImage: working ? "circle.fill" : "circle")
@@ -101,14 +110,17 @@ struct FocusView: View {
                         .minimumScaleFactor(0.55)
                         .lineLimit(1)
                     if let title = session.habitTitle {
-                        Text(title).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
+                        Text(title).font(.headline).foregroundStyle(.primary).lineLimit(1)
                     }
+                    Text(working ? "then \(session.rest) min rest" : "then \(session.work) min work")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
                 .padding(25)
                 .accessibilityElement(children: .combine)
             }
             .padding(9)
-            .frame(maxWidth: 270)
+            .frame(maxWidth: 290)
             .aspectRatio(1, contentMode: .fit)
         }
     }
@@ -118,23 +130,45 @@ struct FocusView: View {
         return String(format: "%02d:%02d", rounded / 60, rounded % 60)
     }
 
+    /// True when the intervals were set from the Custom sheet rather than a preset or a habit.
+    private var isCustom: Bool {
+        engine.session.habitID == nil
+            && ![(25, 5), (50, 10), (15, 3)].contains { $0 == (engine.session.work, engine.session.rest) }
+    }
+
     private func preset(_ work: Int, _ rest: Int) -> some View {
-        Button { configure(work, rest) } label: {
-            Text("\(work) / \(rest)")
-                .font(.system(.subheadline, design: .monospaced))
+        let selected = engine.session.habitID == nil
+            && engine.session.work == work && engine.session.rest == rest
+        return Button { configure(work, rest) } label: {
+            Text("\(work)/\(rest)")
+                .font(.system(.subheadline, design: .monospaced).weight(selected ? .bold : .regular))
+                .foregroundStyle(selected ? Color.black : .primary)
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 12)
-                .background(Theme.panel, in: RoundedRectangle(cornerRadius: 12))
+                .frame(height: 46)
+                .background(selected ? theme.color : Theme.panel, in: RoundedRectangle(cornerRadius: 12))
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(work) minutes work, \(rest) minutes rest")
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    private func circleButton(_ title: String, systemImage: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.title3)
+                .foregroundStyle(.primary)
+                .frame(width: 54, height: 54)
+                .background(Theme.panel, in: Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(title)
     }
 }
 
 struct SettingsView: View {
     let syncAvailable: Bool
     @Environment(\.dismiss) private var dismiss
-    @AppStorage("theme") private var theme = Theme.violet
+    @AppStorage(Theme.key, store: Theme.defaults) private var theme = Theme.violet
     @AppStorage("matchIcon") private var matchIcon = false
     @AppStorage("historyDays") private var historyDays = 14
     @AppStorage("autoTransition") private var autoTransition = false
@@ -192,6 +226,8 @@ struct SettingsView: View {
             }
             .navigationTitle("Settings")
             .toolbar { Button("Done") { dismiss() } }
+            .tint(theme.color)
+            .fontDesign(.rounded)
             .onChange(of: reminders) {
                 Task {
                     if reminders {

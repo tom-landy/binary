@@ -16,6 +16,7 @@ struct FocusActivity: ActivityAttributes {
     }
 
     var habit: String
+    var tint: UInt32 = 0x9E6BFA
 }
 
 struct FocusSession: Codable, Equatable {

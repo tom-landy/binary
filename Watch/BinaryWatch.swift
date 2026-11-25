@@ -40,7 +40,7 @@ struct WatchHabits: View {
                         do { try habit.setCompleted(!habit.completed(today), date: today, in: context) }
                         catch { failure = error.localizedDescription }
                     } label: {
-                        Label(habit.title, systemImage: habit.completed(today) ? "1.circle.fill" : "0.circle")
+                        Label(habit.title, systemImage: habit.completed(today) ? "1.square.fill" : "0.square")
                     }
                 }
                 .navigationTitle("Binary")
