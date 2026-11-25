@@ -23,6 +23,11 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES: "AppIcon-Orange AppIcon-Ember AppIcon-Gold AppIcon-Lime AppIcon-Mint AppIcon-Teal AppIcon-Blue AppIcon-Pink AppIcon-Silver"
         INFOPLIST_KEY_CFBundleDisplayName: Binary
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.productivity
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: UIInterfaceOrientationPortrait
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: >-
+          UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown
+          UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
     dependencies:
       - target: BinaryWidgets
       - target: BinaryWatch
@@ -44,6 +49,7 @@ targets:
     sources:
       - Watch
       - path: Shared/Habits.swift
+      - path: Shared/Theme.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.warhound.binary.watchkitapp

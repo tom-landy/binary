@@ -2,46 +2,72 @@ import SwiftData
 import SwiftUI
 import WidgetKit
 
+// MARK: - Today
+
 struct HabitsView: View {
     let habits: [Habit]
     let theme: Theme
     let toggle: (Habit) -> Void
     let focus: (Habit) -> Void
+    let openSettings: () -> Void
 
-    @AppStorage("historyDays") private var historyDays = 14
     @State private var editor: HabitEditor.Draft?
     @State private var now = Date.now
 
+    private var calendar: Calendar { .current }
     private var today: [Habit] { habits.filter { $0.scheduled(now) } }
-    private var completed: Int { today.filter { $0.completed(now) }.count }
+    private var offToday: [Habit] { habits.filter { !$0.scheduled(now) } }
+    private let columns = [GridItem(.adaptive(minimum: 150), spacing: 12)]
+
+    /// The last seven days, oldest first, ending today.
+    private var week: [Date] {
+        let start = calendar.startOfDay(for: now)
+        return (0..<7).reversed().compactMap { calendar.date(byAdding: .day, value: -$0, to: start) }
+    }
+
+    private var greeting: String {
+        switch calendar.component(.hour, from: now) {
+        case 5..<12: "Good morning"
+        case 12..<17: "Good afternoon"
+        default: "Good evening"
+        }
+    }
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 5) {
-                        Text("Today").font(.title2.bold())
-                        Text(now, format: .dateTime.weekday(.wide).month(.abbreviated).day())
-                            .font(.subheadline).foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Text("\(completed) / \(today.count)").font(.system(.title2, design: .monospaced).bold())
-                        .foregroundStyle(theme.color)
-                        .accessibilityLabel("\(completed) of \(today.count) habits complete")
-                    Button { editor = HabitEditor.Draft() } label: {
-                        Image(systemName: "plus").frame(width: 44, height: 44)
-                            .background(theme.color.opacity(0.12), in: Circle())
-                    }.accessibilityLabel("New habit")
-                }
+            VStack(alignment: .leading, spacing: 0) {
+                header
                 if habits.isEmpty {
-                    ContentUnavailableView("Your habits go here", systemImage: "circle.grid.2x2",
-                                           description: Text("Add an instant or timed habit to get started."))
-                        .frame(minHeight: 220)
+                    empty
+                } else {
+                    summaryChips
+                    LazyVGrid(columns: columns, spacing: 12) {
+                        ForEach(today) { tile($0) }
+                        newHabitTile
+                    }
+                    if !offToday.isEmpty {
+                        Text("Not today").label()
+                            .padding(.top, 26)
+                            .padding(.bottom, 10)
+                            .padding(.leading, 2)
+                        LazyVGrid(columns: columns, spacing: 12) {
+                            ForEach(offToday) { tile($0).opacity(0.5) }
+                        }
+                    }
+                    Text("Hold a habit to edit it.")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(Theme.tertiary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 22)
                 }
-                ForEach(habits) { habit in row(habit) }
             }
-            .padding(22)
+            .padding(.horizontal, 20)
+            .padding(.bottom, 32)
+            .frame(maxWidth: 680)
+            .frame(maxWidth: .infinity)
         }
+        .scrollIndicators(.hidden)
+        .background(Theme.background)
         .task {
             while !Task.isCancelled {
                 now = .now
@@ -51,78 +77,299 @@ struct HabitsView: View {
         .sheet(item: $editor) { HabitEditor(draft: $0) }
     }
 
-    private func row(_ habit: Habit) -> some View {
-        let done = habit.completed(now)
-        let scheduled = habit.scheduled(now)
-        return VStack(alignment: .leading, spacing: 15) {
+    // MARK: Header
+
+    private var header: some View {
+        let due = today
+        let done = due.filter { $0.completed(now) }.count
+        return VStack(alignment: .leading, spacing: 2) {
             HStack {
-                Button {
-                    if scheduled {
-                        if habit.minutes > 0 { focus(habit) } else { toggle(habit) }
+                Text(greeting)
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(Theme.secondary)
+                Spacer()
+                HStack(spacing: 8) {
+                    CircleIconButton(systemImage: "plus", label: "New habit") { editor = HabitEditor.Draft() }
+                    CircleIconButton(systemImage: "gearshape", label: "Settings", action: openSettings)
+                }
+            }
+            .frame(height: 44)
+            HStack {
+                Text(now, format: .dateTime.weekday(.wide))
+                    .font(.system(size: 34, weight: .black))
+                    .tracking(-0.5)
+                    .foregroundStyle(Theme.text)
+                Spacer()
+                if !due.isEmpty {
+                    ProgressRing(value: Double(done) / Double(due.count), color: theme.color, lineWidth: 6) {
+                        Text("\(done)/\(due.count)")
+                            .font(.system(size: 15, weight: .black))
+                            .foregroundStyle(Theme.text)
                     }
-                } label: {
-                    HStack(spacing: 12) {
-                        Text(done ? "1" : "0")
-                            .font(.system(.title3, design: .monospaced).bold())
-                            .frame(width: 41, height: 41)
-                            .foregroundStyle(done ? Color.black : theme.color)
-                            .background(theme.color.opacity(done ? 1 : 0.12), in: RoundedRectangle(cornerRadius: 12))
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(habit.title).font(.headline).foregroundStyle(.primary)
-                            Text(scheduled ? (habit.minutes > 0 ? "\(habit.minutes) min focus" : "Instant") : "Off schedule")
-                                .font(.caption).foregroundStyle(.secondary)
-                        }
-                        Spacer(minLength: 0)
-                    }
-                    .contentShape(Rectangle())
+                    .frame(width: 60, height: 60)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("\(done) of \(due.count) done today")
+                }
+            }
+        }
+    }
+
+    private var summaryChips: some View {
+        let due = today
+        let left = due.filter { !$0.completed(now) }.count
+        let streak = Habit.perfectStreak(habits, today: now)
+        return HStack(spacing: 8) {
+            if streak > 0 {
+                InfoChip(systemImage: "flame.fill", text: "\(streak)-day streak", emphasis: true)
+            }
+            if !due.isEmpty {
+                InfoChip(systemImage: left == 0 ? "checkmark" : nil,
+                         text: left == 0 ? "All done today" : "\(left) left today", emphasis: left == 0)
+            }
+        }
+        .padding(.top, 14)
+        .padding(.bottom, 16)
+    }
+
+    private var empty: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                ToggleCircle(done: true, theme: theme, size: 38)
+                ToggleCircle(done: false, theme: theme, size: 38)
+                ToggleCircle(done: true, theme: theme, size: 38)
+            }
+            .padding(.bottom, 6)
+            Text("Every habit is a 1 or a 0.")
+                .font(.system(size: 24, weight: .black))
+                .foregroundStyle(Theme.text)
+            Text("Instant habits take one tap. Timed habits run a focus session and log themselves when it ends.")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(Theme.secondary)
+            PrimaryButton(title: "Add your first habit", systemImage: "plus", action: { editor = HabitEditor.Draft() })
+                .padding(.top, 12)
+        }
+        .padding(.top, 36)
+    }
+
+    // MARK: Tiles
+
+    private func tile(_ habit: Habit) -> some View {
+        let logged = habit.loggedDays()
+        let timed = habit.minutes > 0
+        let scheduled = habit.scheduled(now)
+        let done = logged.contains(calendar.startOfDay(for: now))
+        let meta = scheduled
+            ? (timed ? "\(habit.minutes) min" : "Instant")
+            : Habit.scheduleText(habit.weekdays)
+        return VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Button { toggle(habit) } label: {
+                    ToggleCircle(done: done, theme: theme, size: 38)
+                        .frame(width: 44, height: 44, alignment: .leading)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .disabled(!scheduled)
-                .accessibilityHint(habit.minutes > 0 ? "Opens Focus" : "Toggles completion")
-                .contextMenu {
-                    if scheduled && habit.minutes > 0 {
-                        Button(done ? "Mark incomplete" : "Mark complete") { toggle(habit) }
+                .accessibilityLabel("\(habit.title), \(done ? "done" : "not done")")
+                .accessibilityHint("Toggles today")
+                Spacer()
+                if timed && scheduled && !done {
+                    Button { focus(habit) } label: {
+                        Image(systemName: "play.fill")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(Theme.text)
+                            .frame(width: 32, height: 32)
+                            .background(Theme.background, in: Circle())
+                            .frame(width: 44, height: 44, alignment: .trailing)
+                            .contentShape(Rectangle())
                     }
-                    Button("Edit habit", systemImage: "pencil") { editor = HabitEditor.Draft(habit) }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Start \(habit.title)")
                 }
-                Button { editor = HabitEditor.Draft(habit) } label: {
-                    Image(systemName: "ellipsis").frame(width: 44, height: 44)
-                }.accessibilityLabel("Edit \(habit.title)")
             }
-            matrix(habit)
+            Spacer(minLength: 10)
+            Text(habit.title)
+                .font(.system(size: 17, weight: .heavy))
+                .foregroundStyle(Theme.text)
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+            Text(meta)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Theme.secondary)
+                .padding(.top, 2)
+            WeekDots(habit: habit, week: week, logged: logged)
+                .padding(.top, 10)
         }
         .padding(15)
-        .background(Theme.panel, in: RoundedRectangle(cornerRadius: 21))
+        .frame(maxWidth: .infinity, minHeight: 150, alignment: .leading)
+        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 22))
+        .paperShadow()
+        .contentShape(RoundedRectangle(cornerRadius: 22))
+        .onTapGesture {
+            guard scheduled else { return }
+            if timed { focus(habit) } else { toggle(habit) }
+        }
+        .contextMenu {
+            if scheduled {
+                Button(done ? "Mark as not done" : "Mark as done",
+                       systemImage: done ? "circle" : "checkmark.circle") { toggle(habit) }
+            }
+            if timed && scheduled {
+                Button("Start focus", systemImage: "play") { focus(habit) }
+            }
+            Button("Edit habit", systemImage: "pencil") { editor = HabitEditor.Draft(habit) }
+        }
     }
 
-    private func matrix(_ habit: Habit) -> some View {
-        let dates = (0..<historyDays).reversed().compactMap {
-            Calendar.current.date(byAdding: .day, value: -$0, to: now)
-        }
-        return HStack(spacing: historyDays == 30 ? 3 : 7) {
-            ForEach(dates, id: \.self) { date in
-                let done = habit.completed(date)
-                let off = !habit.scheduled(date) ||
-                    Calendar.current.startOfDay(for: date) < Calendar.current.startOfDay(for: habit.createdAt)
-                Group {
-                    if done {
-                        Circle().fill(theme.color).shadow(color: theme.color.opacity(0.6), radius: 4)
-                    } else if off {
-                        Capsule().fill(.secondary.opacity(0.35)).frame(height: 2)
-                    } else {
-                        Circle().strokeBorder(theme.color.opacity(0.33), lineWidth: 1)
-                    }
-                }
-                .frame(maxWidth: 13, maxHeight: 13)
-                .aspectRatio(1, contentMode: .fit)
-                .accessibilityLabel("\(date.formatted(date: .abbreviated, time: .omitted)), \(done ? "done" : off ? "off schedule" : "incomplete")")
+    private var newHabitTile: some View {
+        Button { editor = HabitEditor.Draft() } label: {
+            VStack(spacing: 4) {
+                Image(systemName: "plus").font(.system(size: 22, weight: .bold))
+                Text("New habit").font(.system(size: 15, weight: .heavy))
             }
+            .foregroundStyle(Theme.secondary)
+            .frame(maxWidth: .infinity, minHeight: 150)
+            .overlay {
+                RoundedRectangle(cornerRadius: 22)
+                    .strokeBorder(Theme.track, style: StrokeStyle(lineWidth: 2, dash: [6, 5]))
+            }
+            .contentShape(Rectangle())
         }
-        .frame(height: 15)
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("Last \(historyDays) days")
+        .buttonStyle(.plain)
     }
 }
+
+// MARK: - Shared pieces
+
+/// The 0/1 toggle: an empty ring with a 0, or a filled accent circle with a 1.
+struct ToggleCircle: View {
+    let done: Bool
+    let theme: Theme
+    var size: CGFloat = 38
+
+    var body: some View {
+        ZStack {
+            if done {
+                Circle().fill(theme.color)
+            } else {
+                Circle().strokeBorder(Theme.track, lineWidth: max(2, size / 15))
+            }
+            Text(done ? "1" : "0")
+                .font(.system(size: size * 0.42, weight: .heavy))
+                .foregroundStyle(done ? theme.onColor : Theme.tertiary)
+        }
+        .frame(width: size, height: size)
+        .animation(.spring(duration: 0.3), value: done)
+    }
+}
+
+/// Seven small dots for the last week. Neutral marks for done days; an outline when nothing was due.
+struct WeekDots: View {
+    let habit: Habit
+    let week: [Date]
+    let logged: Set<Date>
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(week, id: \.self) { day in
+                Group {
+                    if logged.contains(day) {
+                        Circle().fill(Theme.mark)
+                    } else if habit.due(on: day) {
+                        Circle().fill(Theme.track)
+                    } else {
+                        Circle().strokeBorder(Theme.track, lineWidth: 1.5)
+                    }
+                }
+                .frame(width: 8, height: 8)
+            }
+        }
+        .accessibilityHidden(true)
+    }
+}
+
+struct ProgressRing<Content: View>: View {
+    let value: Double
+    let color: Color
+    var lineWidth: CGFloat = 6
+    @ViewBuilder var label: Content
+
+    var body: some View {
+        ZStack {
+            Circle().inset(by: lineWidth / 2).stroke(Theme.track, lineWidth: lineWidth)
+            Circle().inset(by: lineWidth / 2)
+                .trim(from: 0, to: max(0.001, min(1, value)))
+                .stroke(color, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+                .animation(.spring(duration: 0.5), value: value)
+            label
+        }
+    }
+}
+
+struct InfoChip: View {
+    var systemImage: String?
+    let text: String
+    var emphasis = false
+
+    var body: some View {
+        HStack(spacing: 6) {
+            if let systemImage { Image(systemName: systemImage).font(.system(size: 11, weight: .bold)) }
+            Text(text)
+        }
+        .font(.system(size: 13, weight: .bold))
+        .foregroundStyle(emphasis ? Theme.text : Theme.secondary)
+        .padding(.horizontal, 13)
+        .frame(height: 32)
+        .background(Theme.surface, in: Capsule())
+        .paperShadow()
+    }
+}
+
+struct CircleIconButton: View {
+    let systemImage: String
+    let label: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(Theme.text)
+                .frame(width: 36, height: 36)
+                .background(Theme.surface, in: Circle())
+                .paperShadow()
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+    }
+}
+
+/// Dark ink capsule used for the main action on a screen.
+struct PrimaryButton: View {
+    let title: String
+    var systemImage: String?
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                if let systemImage { Image(systemName: systemImage) }
+                Text(title)
+            }
+            .font(.system(size: 17, weight: .heavy))
+            .foregroundStyle(Theme.onInk)
+            .frame(maxWidth: .infinity, minHeight: 56)
+            .background(Theme.ink, in: Capsule())
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Editor
 
 struct HabitEditor: View {
     struct Draft: Identifiable {
@@ -144,57 +391,200 @@ struct HabitEditor: View {
         }
     }
 
+    static let durations = [10, 15, 25, 45, 60]
+
     @State var draft: Draft
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var context
+    @AppStorage(Theme.key, store: Theme.defaults) private var theme = Theme.violet
+    @FocusState private var nameFocused: Bool
+    @State private var customDuration = false
     @State private var confirmDelete = false
     @State private var failure: String?
     private var title: String { draft.title.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private var canSave: Bool { !title.isEmpty && draft.days != 0 }
 
     var body: some View {
-        NavigationStack {
-            Form {
-                TextField("Habit name", text: $draft.title)
-                Toggle("Timed habit", isOn: $draft.timed)
-                if draft.timed { Stepper("\(draft.minutes) minutes", value: $draft.minutes, in: 1...180) }
-                Section("Schedule") {
-                    Picker("Repeat", selection: $draft.days) {
-                        Text("Daily").tag(127)
-                        Text("Weekdays").tag(62)
-                        Text("Weekends").tag(65)
-                        if ![127, 62, 65].contains(draft.days) {
-                            Text("Custom").tag(draft.days)
+        VStack(spacing: 0) {
+            HStack {
+                Button("Cancel") { dismiss() }
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(Theme.secondary)
+                Spacer()
+                Text(draft.habit == nil ? "New habit" : "Edit habit")
+                    .font(.system(size: 16, weight: .heavy))
+                Spacer()
+                Button("Cancel") {}.font(.system(size: 16, weight: .bold)).hidden()
+            }
+            .frame(height: 44)
+            .padding(.horizontal, 20)
+            .padding(.top, 12)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    TextField("Habit name", text: $draft.title)
+                        .font(.system(size: 24, weight: .heavy))
+                        .focused($nameFocused)
+                        .submitLabel(.done)
+                        .padding(.horizontal, 18)
+                        .frame(height: 62)
+                        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 18))
+                        .paperShadow()
+                        .padding(.top, 14)
+
+                    section("Type") {
+                        HStack(spacing: 10) {
+                            typeOption(timed: false, title: "Instant", detail: "One tap a day")
+                            typeOption(timed: true, title: "Timed", detail: "Runs a focus session")
                         }
                     }
-                    ForEach(Array(Calendar.current.weekdaySymbols.enumerated()), id: \.offset) { day, name in
-                        let bit = 1 << day
-                        Toggle(name, isOn: Binding(
-                            get: { draft.days & bit != 0 },
-                            set: { if $0 { draft.days |= bit } else { draft.days &= ~bit } }
-                        ))
+                    if draft.timed {
+                        section("Duration") { durationPicker }
+                    }
+                    section("Repeat") {
+                        HStack(spacing: 6) {
+                            ForEach(Calendar.current.orderedWeekdays, id: \.self) { dayChip($0) }
+                        }
+                        HStack(spacing: 8) {
+                            presetPill("Every day", 127)
+                            presetPill("Weekdays", 62)
+                            presetPill("Weekends", 65)
+                        }
+                        .padding(.top, 10)
+                    }
+                    if draft.habit != nil {
+                        Button("Delete habit", role: .destructive) { confirmDelete = true }
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(.red)
+                            .padding(.top, 30)
                     }
                 }
-                if draft.habit != nil {
-                    Button("Delete habit", role: .destructive) { confirmDelete = true }
-                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 24)
             }
-            .navigationTitle(draft.habit == nil ? "New Habit" : "Edit Habit")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save", action: save).disabled(title.isEmpty || draft.days == 0)
-                }
-            }
-            .confirmationDialog("Delete this habit and its history?", isPresented: $confirmDelete) {
-                Button("Delete habit", role: .destructive) {
-                    if let habit = draft.habit { context.delete(habit) }
-                    persist()
-                }
-            }
-            .alert("Couldn’t save", isPresented: Binding(get: { failure != nil }, set: { if !$0 { failure = nil } })) {
-                Button("OK") { failure = nil }
-            } message: { Text(failure ?? "") }
+            .scrollDismissesKeyboard(.interactively)
         }
+        .safeAreaInset(edge: .bottom) {
+            PrimaryButton(title: draft.habit == nil ? "Save habit" : "Save changes", action: save)
+                .disabled(!canSave)
+                .opacity(canSave ? 1 : 0.35)
+                .padding(.horizontal, 20)
+                .padding(.bottom, 8)
+        }
+        .foregroundStyle(Theme.text)
+        .fontDesign(.rounded)
+        .tint(theme.color)
+        .presentationBackground(Theme.background)
+        .presentationDragIndicator(.visible)
+        .onAppear {
+            customDuration = !Self.durations.contains(draft.minutes)
+            if draft.habit == nil { nameFocused = true }
+        }
+        .confirmationDialog("Delete this habit and its history?", isPresented: $confirmDelete,
+                            titleVisibility: .visible) {
+            Button("Delete habit", role: .destructive) {
+                if let habit = draft.habit { context.delete(habit) }
+                persist()
+            }
+        }
+        .alert("Couldn’t save", isPresented: Binding(get: { failure != nil }, set: { if !$0 { failure = nil } })) {
+            Button("OK") { failure = nil }
+        } message: { Text(failure ?? "") }
+    }
+
+    private func section<Content: View>(_ name: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(name).label().padding(.leading, 2)
+            VStack(alignment: .leading, spacing: 0, content: content)
+        }
+        .padding(.top, 22)
+    }
+
+    private func typeOption(timed: Bool, title: String, detail: String) -> some View {
+        let selected = draft.timed == timed
+        return Button { draft.timed = timed } label: {
+            VStack(alignment: .leading, spacing: 2) {
+                Group {
+                    if timed {
+                        Image(systemName: "timer").font(.system(size: 15, weight: .bold))
+                    } else {
+                        Text("1").font(.system(size: 15, weight: .black))
+                    }
+                }
+                .foregroundStyle(selected ? theme.color : Theme.secondary)
+                .frame(width: 32, height: 32)
+                .background(selected ? theme.soft : Theme.track, in: Circle())
+                .padding(.bottom, 10)
+                Text(title).font(.system(size: 16, weight: .heavy))
+                Text(detail).font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(14)
+            .background(Theme.surface, in: RoundedRectangle(cornerRadius: 18))
+            .overlay {
+                RoundedRectangle(cornerRadius: 18)
+                    .strokeBorder(selected ? theme.color : .clear, lineWidth: 2)
+            }
+            .paperShadow()
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    private var durationPicker: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                ForEach(Self.durations, id: \.self) { value in
+                    pill("\(value)", selected: !customDuration && draft.minutes == value) {
+                        customDuration = false
+                        draft.minutes = value
+                    }
+                    .accessibilityLabel("\(value) minutes")
+                }
+                pill(customDuration ? "\(draft.minutes)" : "•••", selected: customDuration) {
+                    customDuration = true
+                }
+                .accessibilityLabel("Custom duration")
+            }
+            if customDuration {
+                Stepper("\(draft.minutes) minutes", value: $draft.minutes, in: 1...180)
+                    .font(.system(size: 15, weight: .bold))
+            }
+        }
+    }
+
+    /// Round chip: ink when selected, white otherwise.
+    private func pill(_ text: String, selected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(text)
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(selected ? Theme.onInk : Theme.secondary)
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .background(selected ? Theme.ink : Theme.surface, in: Capsule())
+                .paperShadow()
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    private func dayChip(_ day: Int) -> some View {
+        let bit = 1 << day
+        let on = draft.days & bit != 0
+        return pill(Calendar.current.veryShortWeekdaySymbols[day], selected: on) {
+            if on { draft.days &= ~bit } else { draft.days |= bit }
+        }
+        .accessibilityLabel(Calendar.current.weekdaySymbols[day])
+    }
+
+    private func presetPill(_ title: String, _ days: Int) -> some View {
+        let selected = draft.days == days
+        return Button(title) { draft.days = days }
+            .font(.system(size: 13, weight: .bold))
+            .foregroundStyle(selected ? theme.color : Theme.secondary)
+            .padding(.horizontal, 14)
+            .frame(height: 32)
+            .background(selected ? theme.soft : Theme.track, in: Capsule())
+            .buttonStyle(.plain)
     }
 
     private func save() {

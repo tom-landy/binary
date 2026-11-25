@@ -57,19 +57,16 @@ struct LogHabit: AppIntent {
 }
 
 struct StartFocus: LiveActivityIntent {
-    static let title: LocalizedStringResource = "Start 25-Minute Focus Session"
+    static let title: LocalizedStringResource = "Start Binary Focus"
+    static let description = IntentDescription("Resumes a paused session, or starts the current Work interval.")
 
     @MainActor
     func perform() async throws -> some IntentResult {
         let focus = FocusEngine.shared
         focus.reload()
-        if focus.session.end == nil {
-            focus.configure(work: 25, rest: 5)
-            focus.toggle()
-            await focus.endActivity()
-            try? startActivity(for: focus)
-        }
-        WidgetCenter.shared.reloadAllTimelines()
+        // Already running: nothing to do. Otherwise resume, or finish an expired interval and start the next.
+        if let end = focus.session.end, end > .now { return .result() }
+        _ = try await ToggleFocus().perform()
         return .result()
     }
 }
@@ -81,9 +78,26 @@ struct ToggleFocus: LiveActivityIntent {
     func perform() async throws -> some IntentResult {
         let focus = FocusEngine.shared
         focus.reload()
-        if let end = focus.session.end, end <= .now { return .result() }
+        if let end = focus.session.end, end <= .now {
+            // The interval finished while Binary wasn't running. Log it, then start the next one.
+            if focus.session.phase == .work, let id = focus.session.habitID {
+                let container = try HabitStore.make(sync: false)
+                let context = container.mainContext
+                let descriptor = FetchDescriptor<Habit>(predicate: #Predicate { $0.id == id })
+                try context.fetch(descriptor).first?.setCompleted(true, date: end, in: context)
+            }
+            focus.advance(autoStart: true)
+            await focus.publishActivity()
+            WidgetCenter.shared.reloadAllTimelines()
+            return .result()
+        }
         focus.toggle()
-        await focus.publishActivity()
+        if focus.session.end != nil, Activity<FocusActivity>.activities.isEmpty {
+            try? startActivity(for: focus)
+        } else {
+            await focus.publishActivity()
+        }
+        WidgetCenter.shared.reloadAllTimelines()
         return .result()
     }
 }
@@ -92,10 +106,9 @@ struct ToggleFocus: LiveActivityIntent {
 func startActivity(for focus: FocusEngine) throws {
     guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
     let session = focus.session
-    let state = FocusActivity.ContentState(phase: session.phase.rawValue, end: session.end,
-                                         seconds: Int(ceil(session.remaining())))
+    let state = session.activityState
     _ = try Activity<FocusActivity>.request(
-        attributes: FocusActivity(habit: session.habitTitle ?? ""),
+        attributes: FocusActivity(habit: session.habitTitle ?? "", tint: Theme.current.rgb),
         content: ActivityContent(state: state, staleDate: session.end),
         pushType: nil
     )
