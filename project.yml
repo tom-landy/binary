@@ -1,0 +1,65 @@
+name: Binary
+options:
+  deploymentTarget:
+    iOS: "18.0"
+    watchOS: "11.0"
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    GENERATE_INFOPLIST_FILE: YES
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+targets:
+  Binary:
+    type: application
+    platform: iOS
+    sources: [App, Shared]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.warhound.binary
+        TARGETED_DEVICE_FAMILY: "1,2"
+        CODE_SIGN_ENTITLEMENTS: Config/Binary.entitlements
+        INFOPLIST_FILE: Config/Binary-Info.plist
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES: "AppIcon-Orange AppIcon-Ember AppIcon-Gold AppIcon-Lime AppIcon-Mint AppIcon-Teal AppIcon-Blue AppIcon-Pink AppIcon-Silver"
+        INFOPLIST_KEY_CFBundleDisplayName: Binary
+    dependencies:
+      - target: BinaryWidgets
+      - target: BinaryWatch
+        embed: true
+  BinaryWidgets:
+    type: app-extension
+    platform: iOS
+    sources: [Widgets, Shared]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.warhound.binary.widgets
+        TARGETED_DEVICE_FAMILY: "1,2"
+        CODE_SIGN_ENTITLEMENTS: Config/Widgets.entitlements
+        APPLICATION_EXTENSION_API_ONLY: YES
+        INFOPLIST_FILE: Config/Widgets-Info.plist
+  BinaryWatch:
+    type: application
+    platform: watchOS
+    sources:
+      - Watch
+      - path: Shared/Habits.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.warhound.binary.watchkitapp
+        SDKROOT: watchos
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        TARGETED_DEVICE_FAMILY: "4"
+        INFOPLIST_KEY_CFBundleDisplayName: Binary
+        CODE_SIGN_ENTITLEMENTS: Config/Watch.entitlements
+        INFOPLIST_FILE: Config/Watch-Info.plist
+
+schemes:
+  Binary:
+    build:
+      targets:
+        Binary: all
+    run:
+      config: Debug
+    archive:
+      config: Release
