@@ -106,8 +106,7 @@ struct ToggleFocus: LiveActivityIntent {
 func startActivity(for focus: FocusEngine) throws {
     guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
     let session = focus.session
-    let state = FocusActivity.ContentState(phase: session.phase.rawValue, end: session.end,
-                                         seconds: Int(ceil(session.remaining())))
+    let state = session.activityState
     _ = try Activity<FocusActivity>.request(
         attributes: FocusActivity(habit: session.habitTitle ?? "", tint: Theme.current.rgb),
         content: ActivityContent(state: state, staleDate: session.end),

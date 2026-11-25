@@ -19,7 +19,8 @@ enum Theme: String, CaseIterable, Identifiable {
         }
     }
     var color: Color { Theme.color(rgb) }
-    var icon: String { "AppIcon-\(title)" }
+    /// Violet is the primary icon; every other theme has an alternate.
+    var icon: String? { self == .violet ? nil : "AppIcon-\(title)" }
 
     static func color(_ rgb: UInt32) -> Color {
         Color(red: Double(rgb >> 16) / 255, green: Double(rgb >> 8 & 255) / 255,
@@ -39,6 +40,26 @@ enum Theme: String, CaseIterable, Identifiable {
         group.set(old, forKey: key)
     }
 
-    static let background = Color(red: 13/255, green: 14/255, blue: 18/255)
-    static let panel = Color(red: 22/255, green: 24/255, blue: 31/255)
+    // MARK: Design tokens. Neutrals carry a faint violet cast so they sit with the accent.
+
+    static let background = color(0x0A0A0F)
+    static let surface = color(0x14131B)
+    static let raised = color(0x1C1B25)
+    static let line = Color.white.opacity(0.07)
+    static let text = color(0xF4F2FA)
+    static let secondary = text.opacity(0.56)
+    static let tertiary = text.opacity(0.28)
+    static let faint = text.opacity(0.14)
+    /// Dark ink used on top of the accent colour.
+    static let ink = background
+}
+
+extension Text {
+    /// Small tracked monospaced caps used for section labels and data captions.
+    func label(_ color: Color = Theme.secondary) -> some View {
+        self.font(.system(size: 11, weight: .semibold, design: .monospaced))
+            .tracking(1.6)
+            .textCase(.uppercase)
+            .foregroundStyle(color)
+    }
 }

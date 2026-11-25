@@ -36,6 +36,40 @@ final class Habit {
         }
     }
 
+    /// Start-of-day dates this habit was logged on.
+    func loggedDays(calendar: Calendar = .current) -> Set<Date> {
+        Set((logs ?? []).map { calendar.startOfDay(for: $0.date) })
+    }
+
+    /// Whether the habit existed and was due on this day.
+    func due(on day: Date, calendar: Calendar = .current) -> Bool {
+        scheduled(day) && calendar.startOfDay(for: createdAt) <= calendar.startOfDay(for: day)
+    }
+
+    /// Consecutive days, counting back from today, on which every due habit was logged.
+    /// Today counts once it is complete but never breaks the run while it is still in progress.
+    /// Days with nothing due are skipped.
+    static func perfectStreak(_ habits: [Habit], today: Date = .now, calendar: Calendar = .current) -> Int {
+        guard let earliest = habits.map({ calendar.startOfDay(for: $0.createdAt) }).min() else { return 0 }
+        let logged = Dictionary(habits.map { ($0.id, $0.loggedDays(calendar: calendar)) }, uniquingKeysWith: { $0.union($1) })
+        var day = calendar.startOfDay(for: today)
+        var streak = 0
+        for offset in 0..<366 {
+            if day < earliest { break }
+            let due = habits.filter { $0.due(on: day, calendar: calendar) }
+            if !due.isEmpty {
+                if due.allSatisfy({ logged[$0.id]?.contains(day) == true }) {
+                    streak += 1
+                } else if offset > 0 {
+                    break
+                }
+            }
+            guard let previous = calendar.date(byAdding: .day, value: -1, to: day) else { break }
+            day = previous
+        }
+        return streak
+    }
+
     func completed(_ date: Date) -> Bool {
         (logs ?? []).contains { Calendar.current.isDate($0.date, inSameDayAs: date) }
     }

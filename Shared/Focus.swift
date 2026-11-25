@@ -13,6 +13,8 @@ struct FocusActivity: ActivityAttributes {
         var phase: String
         var end: Date?
         var seconds: Int
+        /// Length of the whole interval in seconds, for progress bars.
+        var total: Int = 0
     }
 
     var habit: String
@@ -30,6 +32,14 @@ struct FocusSession: Codable, Equatable {
 
     func remaining(at date: Date = .now) -> Double {
         max(0, end?.timeIntervalSince(date) ?? seconds)
+    }
+
+    /// Interval length in seconds for the current phase.
+    var total: Int { (phase == .work ? work : rest) * 60 }
+
+    var activityState: FocusActivity.ContentState {
+        FocusActivity.ContentState(phase: phase.rawValue, end: end,
+                                   seconds: Int(ceil(remaining())), total: total)
     }
 
     mutating func advance(at date: Date, autoStart: Bool) {
@@ -108,9 +118,7 @@ final class FocusEngine {
     }
 
     func publishActivity() async {
-        let state = FocusActivity.ContentState(phase: session.phase.rawValue, end: session.end,
-                                             seconds: Int(ceil(session.remaining())))
-        let content = ActivityContent(state: state, staleDate: session.end)
+        let content = ActivityContent(state: session.activityState, staleDate: session.end)
         for activity in Activity<FocusActivity>.activities {
             if activity.attributes.habit == (session.habitTitle ?? "") {
                 await activity.update(content)

@@ -11,19 +11,7 @@ struct BinaryApp: App {
     @State private var syncAvailable = true
     @State private var loadError: String?
 
-    init() {
-        Theme.migrate()
-        // Match navigation titles to the rounded type used everywhere else.
-        let bar = UINavigationBar.appearance()
-        bar.largeTitleTextAttributes = [.font: Self.rounded(size: 34, weight: .bold)]
-        bar.titleTextAttributes = [.font: Self.rounded(size: 17, weight: .semibold)]
-    }
-
-    private static func rounded(size: CGFloat, weight: UIFont.Weight) -> UIFont {
-        let base = UIFont.systemFont(ofSize: size, weight: weight)
-        guard let descriptor = base.fontDescriptor.withDesign(.rounded) else { return base }
-        return UIFont(descriptor: descriptor, size: size)
-    }
+    init() { Theme.migrate() }
 
     var body: some Scene {
         WindowGroup {
@@ -42,6 +30,7 @@ struct BinaryApp: App {
                     ProgressView().task { openStore() }
                 }
             }
+            .background(Theme.background.ignoresSafeArea())
             .preferredColorScheme(.dark)
         }
     }
@@ -101,44 +90,26 @@ struct Workspace: View {
     var body: some View {
         Group {
             if size == .regular {
-                NavigationStack {
-                    HStack(spacing: 0) {
-                        habitPane.frame(maxWidth: .infinity)
-                        Divider()
-                        focusPane.frame(maxWidth: .infinity)
-                    }
-                    .background(Theme.background.ignoresSafeArea())
-                    .navigationTitle("Binary")
-                    .navigationBarTitleDisplayMode(.inline)
-                    .toolbar { settingsButton }
-                    .toolbarBackground(Theme.background, for: .navigationBar)
+                HStack(spacing: 0) {
+                    habitPane.frame(maxWidth: .infinity)
+                    Rectangle().fill(Theme.line).frame(width: 0.5).ignoresSafeArea()
+                    focusPane(showsSettings: false).frame(maxWidth: .infinity)
                 }
             } else {
                 TabView(selection: $page) {
-                    Tab("Today", systemImage: "square.grid.3x3.square", value: Page.habits) {
-                        NavigationStack {
-                            habitPane
-                                .background(Theme.background.ignoresSafeArea())
-                                .navigationTitle("Today")
-                                .toolbar { settingsButton }
-                                .toolbarBackground(Theme.background, for: .navigationBar)
-                        }
+                    Tab("Today", systemImage: "square.grid.2x2.fill", value: Page.habits) {
+                        habitPane
                     }
                     Tab("Focus", systemImage: "timer", value: Page.focus) {
-                        NavigationStack {
-                            focusPane
-                                .background(Theme.background.ignoresSafeArea())
-                                .navigationTitle("Focus")
-                                .toolbar { settingsButton }
-                                .toolbarBackground(Theme.background, for: .navigationBar)
-                        }
+                        focusPane(showsSettings: true)
                     }
                 }
-                .toolbarBackground(Theme.background, for: .tabBar)
+                .toolbarBackground(Theme.background.opacity(0.94), for: .tabBar)
                 .toolbarBackground(.visible, for: .tabBar)
             }
         }
-        .fontDesign(.rounded)
+        .background(Theme.background.ignoresSafeArea())
+        .foregroundStyle(Theme.text)
         .tint(theme.color)
         .sheet(isPresented: $settings) { SettingsView(syncAvailable: syncAvailable) }
         .confirmationDialog(replacementTitle, isPresented: Binding(
@@ -168,18 +139,14 @@ struct Workspace: View {
         .onChange(of: theme) { WidgetCenter.shared.reloadAllTimelines() }
     }
 
-    private var settingsButton: some ToolbarContent {
-        ToolbarItem(placement: .topBarTrailing) {
-            Button("Settings", systemImage: "gearshape") { settings = true }
-        }
-    }
-
     private var habitPane: some View {
-        HabitsView(habits: habits, theme: theme, toggle: toggleHabit, focus: activateHabit)
+        HabitsView(habits: habits, theme: theme, toggle: toggleHabit, focus: activateHabit,
+                   openSettings: { settings = true })
     }
 
-    private var focusPane: some View {
-        FocusView(engine: engine, theme: theme, play: play,
+    private func focusPane(showsSettings: Bool) -> some View {
+        FocusView(engine: engine, theme: theme, showsSettings: showsSettings,
+                  openSettings: { settings = true }, play: play,
                   reset: { request(.reset) },
                   skip: {
                       engine.advance()

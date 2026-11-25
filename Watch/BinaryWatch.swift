@@ -36,12 +36,27 @@ struct WatchHabits: View {
                     .navigationTitle("Binary")
             } else {
                 List(instant) { habit in
+                    let done = habit.completed(today)
                     Button {
-                        do { try habit.setCompleted(!habit.completed(today), date: today, in: context) }
+                        do { try habit.setCompleted(!done, date: today, in: context) }
                         catch { failure = error.localizedDescription }
                     } label: {
-                        Label(habit.title, systemImage: habit.completed(today) ? "1.square.fill" : "0.square")
+                        HStack(spacing: 10) {
+                            ZStack {
+                                if done {
+                                    RoundedRectangle(cornerRadius: 6).fill(Theme.violet.color)
+                                } else {
+                                    RoundedRectangle(cornerRadius: 6).strokeBorder(Theme.violet.color, lineWidth: 1.5)
+                                }
+                                Text(done ? "1" : "0")
+                                    .font(.system(size: 12, weight: .bold, design: .monospaced))
+                                    .foregroundStyle(done ? Theme.ink : Theme.violet.color)
+                            }
+                            .frame(width: 24, height: 24)
+                            Text(habit.title).lineLimit(2)
+                        }
                     }
+                    .accessibilityLabel("\(habit.title), \(done ? "done" : "not done")")
                 }
                 .navigationTitle("Binary")
             }
