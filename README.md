@@ -34,7 +34,20 @@ xcodebuild -project Binary.xcodeproj -scheme Binary \
 
 ## TestFlight
 
-For TestFlight, create the app record in App Store Connect using `com.warhound.binary`. Set up production CloudKit schema in CloudKit Console before distributing, then select a generic iOS device destination in Xcode, choose **Product → Archive**, and use **Distribute App** in Organizer. Provisioning and upload use your own Apple Developer team. The source archive contains no signing credentials.
+Already set in the project: version 1.0 (build 1), privacy manifests for the app and widget extension, the encryption declaration (`ITSAppUsesNonExemptEncryption` = NO, so uploads skip the export compliance question), all four iPad orientations, the app category, and a launch background that matches light and dark mode. Every push to `main` and every pull request is compiled by the GitHub Actions workflow in `.github/workflows/build.yml`.
+
+One-time setup, in this order:
+
+1. In the Apple Developer portal, register the three bundle identifiers, the App Group and the iCloud container listed in the table above.
+2. In App Store Connect, create the app record with bundle identifier `com.warhound.binary`.
+3. Run Binary once from Xcode on a device signed into iCloud, create a habit, then open CloudKit Console, select `iCloud.com.warhound.binary` and choose **Deploy Schema Changes** to production. TestFlight builds use the production CloudKit environment, so sync fails until this is done.
+
+For each build:
+
+1. Increase `CURRENT_PROJECT_VERSION` in `project.yml` (App Store Connect rejects a repeated build number), then run `xcodegen generate`.
+2. Select **Any iOS Device (arm64)** as the destination and choose **Product → Archive**.
+3. In Organizer, choose **Distribute App → TestFlight & App Store**. Xcode switches the push entitlement to production when it signs for distribution.
+4. When processing finishes in App Store Connect, add the build to an internal testing group. External testers also need a short beta description and Beta App Review.
 
 ## Device checks
 
